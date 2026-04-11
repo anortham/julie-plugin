@@ -1,0 +1,109 @@
+name: Update Plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Julie version (e.g., 6.1.7)'
+        required: true
+      tag:
+        description: 'Julie release tag (e.g., v6.1.7)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout plugin repo
+        uses: actions/checkout@v4
+
+      - name: Download release archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ inputs.version }}"
+          mkdir -p /tmp/artifacts
+
+          gh release download "${{ inputs.tag }}" \
+            --repo anortham/julie \
+            --pattern "julie-v${VERSION}-aarch64-apple-darwin.tar.gz" \
+            --dir /tmp/artifacts
+
+          gh release download "${{ inputs.tag }}" \
+            --repo anortham/julie \
+            --pattern "julie-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            --dir /tmp/artifacts
+
+          gh release download "${{ inputs.tag }}" \
+            --repo anortham/julie \
+            --pattern "julie-v${VERSION}-x86_64-pc-windows-msvc.zip" \
+            --dir /tmp/artifacts
+
+      - name: Replace archives
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          # Remove old archives
+          rm -f bin/archives/julie-v*
+
+          # Move new archives in
+          mv /tmp/artifacts/julie-v${VERSION}-aarch64-apple-darwin.tar.gz bin/archives/
+          mv /tmp/artifacts/julie-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz bin/archives/
+          mv /tmp/artifacts/julie-v${VERSION}-x86_64-pc-windows-msvc.zip bin/archives/
+
+          # Remove any previously-extracted binaries so next launch re-extracts
+          rm -rf bin/aarch64-apple-darwin bin/x86_64-unknown-linux-gnu bin/x86_64-pc-windows-msvc
+
+      - name: Update skills from julie source
+        run: |
+          git clone --depth 1 --branch "${{ inputs.tag }}" \
+            https://github.com/anortham/julie.git /tmp/julie
+
+          rm -rf skills/
+          mkdir -p skills
+
+          for skill in architecture call-trace dependency-graph editing explore-area \
+                       impact-analysis logic-flow metrics search-debug type-flow \
+                       web-research; do
+            if [ -d "/tmp/julie/.claude/skills/${skill}" ]; then
+              cp -r "/tmp/julie/.claude/skills/${skill}" "skills/${skill}"
+            else
+              echo "WARNING: skill '${skill}' not found in julie repo" >&2
+            fi
+          done
+
+          SKILL_COUNT=$(ls skills/*/SKILL.md 2>/dev/null | wc -l)
+          echo "Copied ${SKILL_COUNT} skills"
+          if [ "$SKILL_COUNT" -lt 11 ]; then
+            echo "WARNING: Expected 11 skills, got ${SKILL_COUNT}" >&2
+          fi
+
+      - name: Update version in manifests
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          jq --arg v "$VERSION" '.version = $v' .claude-plugin/plugin.json > tmp.json
+          mv tmp.json .claude-plugin/plugin.json
+
+          jq --arg v "$VERSION" '.version = $v' package.json > tmp.json
+          mv tmp.json package.json
+
+          jq --arg v "$VERSION" '.plugins[0].version = $v' .claude-plugin/marketplace.json > tmp.json
+          mv tmp.json .claude-plugin/marketplace.json
+
+          echo "Updated manifests to v${VERSION}"
+
+      - name: Commit and force-push (orphan to prevent history bloat)
+        run: |
+          VERSION="${{ inputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan fresh-main
+          git add -A
+          git commit -m "feat: update to julie v${VERSION}"
+          git push --force origin fresh-main:main
