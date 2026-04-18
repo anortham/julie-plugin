@@ -1,7 +1,7 @@
 {
   "name": "julie",
-  "description": "Code intelligence server: search, navigation, and refactoring across 33 languages",
-  "version": "7.0.0",
+  "description": "Code intelligence server: search, navigation, and refactoring across 34 languages",
+  "version": "7.1.0",
   "author": {
     "name": "Alan Northam"
   },
