@@ -65,9 +65,7 @@ jobs:
           rm -rf skills/
           mkdir -p skills
 
-          for skill in architecture call-trace dependency-graph editing explore-area \
-                       impact-analysis logic-flow metrics search-debug type-flow \
-                       web-research; do
+          for skill in editing explore-area impact-analysis web-research; do
             if [ -d "/tmp/julie/.claude/skills/${skill}" ]; then
               cp -r "/tmp/julie/.claude/skills/${skill}" "skills/${skill}"
             else
@@ -77,8 +75,8 @@ jobs:
 
           SKILL_COUNT=$(ls skills/*/SKILL.md 2>/dev/null | wc -l)
           echo "Copied ${SKILL_COUNT} skills"
-          if [ "$SKILL_COUNT" -lt 11 ]; then
-            echo "WARNING: Expected 11 skills, got ${SKILL_COUNT}" >&2
+          if [ "$SKILL_COUNT" -lt 4 ]; then
+            echo "WARNING: Expected 4 skills, got ${SKILL_COUNT}" >&2
           fi
 
       - name: Update version in manifests
