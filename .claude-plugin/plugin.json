@@ -1,0 +1,27 @@
+{
+  "name": "julie",
+  "description": "Code intelligence server: search, navigation, and refactoring across 34 languages",
+  "version": "7.6.0",
+  "author": {
+    "name": "Alan Northam"
+  },
+  "repository": "https://github.com/anortham/julie-plugin",
+  "homepage": "https://github.com/anortham/julie",
+  "license": "MIT",
+  "keywords": [
+    "code-intelligence",
+    "search",
+    "navigation",
+    "refactoring",
+    "tree-sitter",
+    "mcp"
+  ],
+  "mcpServers": {
+    "julie": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs"
+      ]
+    }
+  }
+}
