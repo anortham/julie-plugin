@@ -1,0 +1,2 @@
+# Keep scripts as LF everywhere
+hooks/run.cjs text eol=lf
