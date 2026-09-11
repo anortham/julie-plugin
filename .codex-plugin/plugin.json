@@ -9,13 +9,5 @@
   "repository": "https://github.com/anortham/julie-plugin",
   "license": "MIT",
   "skills": "./skills/",
-  "hooks": "./hooks/hooks.json",
-  "mcpServers": {
-    "julie": {
-      "command": "node",
-      "args": [
-        "./hooks/run.cjs"
-      ]
-    }
-  }
+  "hooks": "./hooks/hooks.json"
 }

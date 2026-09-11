@@ -15,13 +15,13 @@ The `/web-research` skill needs [browser39](https://github.com/alejandroqh/brows
 | Harness | Install | Mechanism |
 |---|---|---|
 | Claude Code | `/plugin marketplace add anortham/julie-plugin`, then `/plugin install julie@julie-plugin` | plugin manifest with `mcpServers` and hooks |
-| Codex | `codex plugin marketplace add anortham/julie-plugin`, then `codex plugin add julie@julie-plugin` | Agent Plugins `mcp.json`, skills, hooks |
-| Antigravity | `agy plugin install https://github.com/anortham/julie-plugin` | root `plugin.json`, `mcp_config.json`, skills |
+| Codex | `codex plugin marketplace add anortham/julie-plugin`, then `codex plugin add julie@julie-plugin`, then add the `mcp_servers.julie` block to `~/.codex/config.toml` | skills and hooks from the plugin; stdio command from the config |
+| Antigravity | `agy plugin install https://github.com/anortham/julie-plugin`, then add the `mcpServers.julie` block to `~/.gemini/config/mcp_config.json` | skills from the plugin; stdio command from the config |
 | OpenCode | clone, `node bin/install-opencode.cjs`, paste the printed `opencode.json` block | `mcp.julie` local command |
 | Hermes | clone, add the `mcp_servers.julie` block to `~/.hermes/config.yaml` | stdio command |
 | Cursor | clone, add the `mcpServers.julie` block to `~/.cursor/mcp.json` | stdio command |
 
-Every harness runs the same command: `node <plugin-root>/hooks/run.cjs`. The launcher extracts the archive for your platform and starts `julie-server`.
+Every harness runs the same command: `node <plugin-root>/hooks/run.cjs`. The launcher extracts the archive for your platform and starts `julie-server` in the project directory.
 
 ### Claude Code
 
@@ -43,16 +43,17 @@ codex plugin marketplace add anortham/julie-plugin
 codex plugin add julie@julie-plugin
 ```
 
-Codex reads the root `plugin.json`, `mcp.json`, `skills/`, and `hooks/hooks.json`. Run `codex`, open `/hooks`, and trust the two Julie hooks.
+Codex reads the root `plugin.json`, `skills/`, and `hooks/hooks.json`. Run `codex`, open `/hooks`, and trust the two Julie hooks.
 
-Codex does not send MCP roots, so Julie uses the process working directory. If Codex starts Julie from the wrong directory, set `JULIE_WORKSPACE` in `~/.codex/config.toml`:
+Then register the server in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.julie]
 command = "node"
 args = ["/absolute/path/to/julie-plugin/hooks/run.cjs"]
-env = { "JULIE_WORKSPACE" = "/absolute/path/to/your/project" }
 ```
+
+Use a clone of this repo, or the plugin root that `codex plugin list` prints. Codex starts a plugin's MCP servers inside the plugin directory. It sends no MCP roots. So this repo declares no server for Codex; the config entry starts Julie in the project directory. Set `env = { "JULIE_WORKSPACE" = "/absolute/path/to/your/project" }` on the entry when Codex starts Julie somewhere else.
 
 ### Antigravity
 
@@ -60,7 +61,20 @@ env = { "JULIE_WORKSPACE" = "/absolute/path/to/your/project" }
 agy plugin install https://github.com/anortham/julie-plugin
 ```
 
-Antigravity reads the root `plugin.json`, `mcp_config.json`, and `skills/`.
+Antigravity reads the root `plugin.json` and `skills/`. Then register the server in `~/.gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "julie": {
+      "command": "node",
+      "args": ["/absolute/path/to/julie-plugin/hooks/run.cjs"]
+    }
+  }
+}
+```
+
+Antigravity starts a plugin's MCP servers inside the plugin directory. It sends no MCP roots. So this repo declares no server for Antigravity; the config entry starts Julie in the project directory.
 
 ### OpenCode
 
@@ -142,13 +156,11 @@ This repo packages pre-built binaries and plugin metadata. Julie's source code l
 
 ```
 plugin.json                  Root manifest: Agent Plugins schema (Codex) and Antigravity read it
-mcp.json                     Agent Plugins MCP declaration (stdio, node ./hooks/run.cjs)
-mcp_config.json              Antigravity MCP declaration (same command)
 .claude-plugin/
   plugin.json                Claude Code manifest (mcpServers, hooks)
   marketplace.json           Claude Code marketplace entry
 .codex-plugin/
-  plugin.json                Codex compatibility manifest (skills, hooks, mcpServers)
+  plugin.json                Codex compatibility manifest (skills, hooks)
 .agents/plugins/
   marketplace.json           Codex marketplace entry
 hooks/

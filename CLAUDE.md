@@ -12,13 +12,11 @@ The actual Julie server source lives at `anortham/julie`. Changes to server beha
 
 ```
 plugin.json                  Root manifest: Agent Plugins schema (Codex) and Antigravity read it
-mcp.json                     Agent Plugins MCP declaration (stdio, node ./hooks/run.cjs)
-mcp_config.json              Antigravity MCP declaration (same command)
 .claude-plugin/
   plugin.json                Claude Code manifest (mcpServers, hooks)
   marketplace.json           Claude Code marketplace entry
 .codex-plugin/
-  plugin.json                Codex compatibility manifest (skills, hooks, mcpServers)
+  plugin.json                Codex compatibility manifest (skills, hooks)
 .agents/plugins/
   marketplace.json           Codex marketplace entry
 hooks/
@@ -33,7 +31,7 @@ JULIE_AGENT_INSTRUCTIONS.md  Routing text copied from anortham/julie at the rele
 package.json                 Plugin identity and version
 ```
 
-Every MCP declaration runs the same command: `node <plugin-root>/hooks/run.cjs`. The path form differs per harness: `${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs` for Claude Code, `./hooks/run.cjs` for Agent Plugins and Antigravity, and the absolute path of the clone for OpenCode, Hermes, and Cursor.
+Every MCP declaration runs the same command: `node <plugin-root>/hooks/run.cjs`. The path form differs per harness: `${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs` for Claude Code, and the absolute path of the clone for Codex, Antigravity, OpenCode, Hermes, and Cursor. Codex and Antigravity start a plugin's MCP servers inside the plugin directory and send no MCP roots, so the plugin declares no server for them; the user's config entry starts Julie in the project directory.
 
 ### Key Design Decisions
 
