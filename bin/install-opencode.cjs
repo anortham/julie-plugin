@@ -131,17 +131,14 @@ function printMcpHint() {
       "julie": {
         "type": "local",
         "command": ["node", "${launcher}"],
-        "enabled": true,
-        "environment": {
-          "JULIE_WORKSPACE": "/absolute/path/to/your/project"
-        }
+        "enabled": true
       }
     }
   }
 
-  Note: \`command\` is an array; the env key is \`environment\` (not \`env\`).
-  JULIE_WORKSPACE is optional when OpenCode starts from the repo root; set it
-  when OpenCode launches the server from an unreliable cwd.
+  Note: \`command\` is an array. OpenCode starts the server in the project
+  directory. Add \`"environment": { "JULIE_WORKSPACE": "/absolute/path" }\` to a
+  project opencode.json only when OpenCode starts it somewhere else.
 `);
 }
 

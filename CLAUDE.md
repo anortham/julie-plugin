@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-This is the **plugin distribution repo** for [Julie](https://github.com/anortham/julie), a Rust-based code intelligence MCP server. This repo does not contain Julie's source code. It packages pre-built binaries, skills, and one manifest per harness: Claude Code, Codex, Antigravity, OpenCode, Hermes, and Cursor.
+This is the **plugin distribution repo** for [Julie](https://github.com/anortham/julie), a Rust-based code intelligence MCP server. This repo does not contain Julie's source code. It packages pre-built binaries, skills, and one install path per harness: Claude Code, Codex, Antigravity, OpenCode, Hermes, and Cursor.
 
 The actual Julie server source lives at `anortham/julie`. Changes to server behavior, MCP tools, or language support happen there, not here.
 
@@ -31,7 +31,7 @@ JULIE_AGENT_INSTRUCTIONS.md  Routing text copied from anortham/julie at the rele
 package.json                 Plugin identity and version
 ```
 
-Every MCP declaration runs the same command: `node <plugin-root>/hooks/run.cjs`. The path form differs per harness: `${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs` for Claude Code, and the absolute path of the clone for Codex, Antigravity, OpenCode, Hermes, and Cursor. Codex and Antigravity start a plugin's MCP servers inside the plugin directory and send no MCP roots, so the plugin declares no server for them; the user's config entry starts Julie in the project directory.
+Every MCP declaration runs the same command: `node <plugin-root>/hooks/run.cjs`. The path form differs per harness: `${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs` for Claude Code, and the absolute path of the clone for Codex, Antigravity, OpenCode, Hermes, and Cursor. Codex and Antigravity start a plugin's MCP servers inside the plugin directory. They send no MCP roots. So the plugin declares no server for them. The user's config entry starts Julie in the project directory.
 
 ### Key Design Decisions
 

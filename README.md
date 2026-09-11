@@ -1,8 +1,8 @@
 # Julie Plugin
 
-This repo installs [Julie](https://github.com/anortham/julie), a Rust code intelligence MCP server, into six AI coding harnesses. Julie gives AI coding agents LSP-quality search, navigation, and refactoring across 36 programming languages.
+This repo installs [Julie](https://github.com/anortham/julie), a Rust code intelligence MCP server, into six AI coding harnesses, with one install path per harness. Julie gives AI coding agents LSP-quality search, navigation, and refactoring across 36 programming languages.
 
-Nothing to install first: the archive carries the semantic sidecar. Julie extracts the binaries on the first launch, starts its machine service, and indexes your codebase. Later sessions load the cached index and update only the changed files.
+You need Node.js 22.5 or newer; the launcher is a Node script. Nothing else to install: the archive carries the semantic sidecar. Julie extracts the binaries on the first launch, starts its machine service, and indexes your codebase. Later sessions load the cached index and update only the changed files.
 
 For the tools, capabilities, and supported languages, see the [Julie repository](https://github.com/anortham/julie).
 
@@ -93,14 +93,13 @@ The installer links the skills into `~/.config/opencode/skills/` and prints an `
     "julie": {
       "type": "local",
       "command": ["node", "/absolute/path/to/julie-plugin/hooks/run.cjs"],
-      "enabled": true,
-      "environment": {
-        "JULIE_WORKSPACE": "/absolute/path/to/your/project"
-      }
+      "enabled": true
     }
   }
 }
 ```
+
+OpenCode expects `command` as an array. The env key is `environment`, not `env`.
 
 OpenCode expects `command` as an array and the env key is `environment`. `JULIE_WORKSPACE` is optional when OpenCode starts from the repo root.
 
@@ -134,7 +133,7 @@ Clone the repo, then add this block to `~/.cursor/mcp.json` (global) or `.cursor
 
 ### JULIE_WORKSPACE
 
-Julie indexes the workspace the harness reports. When a harness does not send MCP roots, Julie uses the process working directory. Set `JULIE_WORKSPACE` in the harness MCP config when the harness starts the server from another directory.
+The launcher binds every tool call to `JULIE_WORKSPACE` when you set it, else to the directory the harness started it in. Every path above starts Julie in the project directory. Set `JULIE_WORKSPACE` in the MCP config entry when a harness starts Julie somewhere else.
 
 ## What the Plugin Provides
 
