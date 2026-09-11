@@ -1,7 +1,7 @@
 ---
 name: dead-code-audit
 description: Use when auditing Julie for dead code, test-only code paths, stale helpers, graph gaps, or cleanup candidates before deleting, privatizing, or simplifying code.
-allowed-tools: mcp__julie__manage_workspace, mcp__julie__fast_search, mcp__julie__fast_refs, mcp__julie__deep_dive, mcp__julie__blast_radius, mcp__julie__get_context, mcp__julie__spillover_get, Bash
+allowed-tools: mcp__julie__manage_workspace, mcp__julie__fast_search, mcp__julie__fast_refs, mcp__julie__deep_dive, mcp__julie__blast_radius, mcp__julie__get_context, Bash
 ---
 
 # Dead Code Audit
@@ -24,7 +24,7 @@ Do not use this as a blind deletion workflow. Dynamic dispatch, trait impls, CLI
 1. Get the current workspace id:
 
 ```text
-manage_workspace(operation="stats")
+manage_workspace(operation="status")
 ```
 
 2. Run the bundled inventory script from the repo root:
@@ -129,7 +129,7 @@ Before editing code:
 - write or identify the regression test that protects live behavior
 - remove tests that only preserve the fossil behavior
 - run the narrowest relevant test first
-- after a batch, the lead session runs `cargo xtask test changed`, then `cargo xtask test dev`
+- after a batch, the lead session runs `cargo xtask test dev`
 
 Never add a new test whose only purpose is to keep a questionable symbol alive.
 
