@@ -6,6 +6,7 @@ const path = require('path');
 
 const {
   detectPlatform,
+  findArchive,
   getPreflightMarkerPath,
   maybeStopLegacyDaemon,
   prepareBinaryForLaunch,
@@ -52,6 +53,26 @@ test('detectPlatform returns null for unsupported platform/arch combos', () => {
   assert.equal(detectPlatform('linux', 'arm64'), null);
   assert.equal(detectPlatform('win32', 'arm64'), null);
   assert.equal(detectPlatform('freebsd', 'x64'), null);
+});
+
+test('findArchive picks the highest version when several archives match', () => {
+  const archiveDir = path.join('plugin', 'bin', 'archives');
+  const archivePattern = { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' };
+  const fsImpl = {
+    readdirSync() {
+      return [
+        'julie-v7.18.0-x86_64-unknown-linux-gnu.tar.gz',
+        'julie-v11.0.0-aarch64-apple-darwin.tar.gz',
+        'julie-v10.0.0-x86_64-unknown-linux-gnu.tar.gz',
+        'julie-v8.0.0-x86_64-unknown-linux-gnu.tar.gz',
+      ];
+    },
+  };
+
+  assert.equal(
+    findArchive(archiveDir, archivePattern, fsImpl),
+    path.join(archiveDir, 'julie-v10.0.0-x86_64-unknown-linux-gnu.tar.gz')
+  );
 });
 
 test('maybeStopLegacyDaemon stops legacy julie-daemon when present', () => {

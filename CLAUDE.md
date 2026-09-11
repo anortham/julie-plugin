@@ -103,7 +103,7 @@ Scripts in `hooks/` must:
 ## Testing Locally
 
 ```bash
-node --test hooks/
+node --test hooks/*.test.cjs
 
 claude --plugin-dir /path/to/julie-plugin
 claude plugin install /path/to/julie-plugin

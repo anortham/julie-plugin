@@ -55,10 +55,12 @@ function detectPlatform(plat = os.platform(), arch = os.arch()) {
 
 function findArchive(archiveDir, archivePattern, fsImpl = fs) {
   try {
-    for (const file of fsImpl.readdirSync(archiveDir)) {
-      if (file.startsWith(archivePattern.prefix) && file.endsWith(archivePattern.suffix)) {
-        return path.join(archiveDir, file);
-      }
+    const matches = fsImpl
+      .readdirSync(archiveDir)
+      .filter((file) => file.startsWith(archivePattern.prefix) && file.endsWith(archivePattern.suffix))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    if (matches.length > 0) {
+      return path.join(archiveDir, matches[matches.length - 1]);
     }
   } catch (_) {
     // archiveDir missing
