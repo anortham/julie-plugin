@@ -6,7 +6,6 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
-const codexInstaller = path.join(root, 'bin', 'install-codex.cjs');
 const opencodeInstaller = path.join(root, 'bin', 'install-opencode.cjs');
 
 const JULIE_BLOCK = `
@@ -32,59 +31,6 @@ function runInstaller(script, home) {
 
   return result.stdout;
 }
-
-test('Codex installer links skills but removes legacy Julie hooks and AGENTS block', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-codex-'));
-  const codexHome = path.join(home, '.codex');
-  fs.mkdirSync(codexHome, { recursive: true });
-
-  const hooksPath = path.join(codexHome, 'hooks.json');
-  fs.writeFileSync(
-    hooksPath,
-    JSON.stringify(
-      {
-        hooks: {
-          SessionStart: [
-            {
-              hooks: [
-                {
-                  type: 'command',
-                  command: 'node "/old/codex-sessionstart.cjs" # julie-plugin',
-                },
-              ],
-            },
-            {
-              hooks: [{ type: 'command', command: 'node "/keep/me.cjs"' }],
-            },
-          ],
-        },
-      },
-      null,
-      2
-    ) + '\n'
-  );
-  fs.writeFileSync(path.join(codexHome, 'AGENTS.md'), `user content\n${JULIE_BLOCK}`);
-
-  runInstaller(codexInstaller, home);
-
-  assert.ok(fs.lstatSync(path.join(codexHome, 'skills', 'julie-editing')).isSymbolicLink());
-
-  const hooks = JSON.parse(fs.readFileSync(hooksPath, 'utf8'));
-  assert.deepEqual(hooks, {
-    hooks: {
-      SessionStart: [
-        {
-          hooks: [{ type: 'command', command: 'node "/keep/me.cjs"' }],
-        },
-      ],
-    },
-  });
-
-  const agents = fs.readFileSync(path.join(codexHome, 'AGENTS.md'), 'utf8');
-  assert.match(agents, /user content/);
-  assert.doesNotMatch(agents, /julie-precedence/);
-  assert.doesNotMatch(agents, /legacy hook guidance/);
-});
 
 test('OpenCode installer links skills but removes legacy plugin and AGENTS block', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-opencode-'));

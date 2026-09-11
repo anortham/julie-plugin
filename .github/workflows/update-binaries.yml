@@ -101,6 +101,8 @@ jobs:
             exit 1
           fi
 
+          cp /tmp/julie/JULIE_AGENT_INSTRUCTIONS.md JULIE_AGENT_INSTRUCTIONS.md
+
       - name: Update version in manifests
         run: |
           VERSION="${{ inputs.version }}"
@@ -113,6 +115,15 @@ jobs:
 
           jq --arg v "$VERSION" '.plugins[0].version = $v' .claude-plugin/marketplace.json > tmp.json
           mv tmp.json .claude-plugin/marketplace.json
+
+          jq --arg v "$VERSION" '.version = $v' plugin.json > tmp.json
+          mv tmp.json plugin.json
+
+          jq --arg v "$VERSION" '.version = $v' .codex-plugin/plugin.json > tmp.json
+          mv tmp.json .codex-plugin/plugin.json
+
+          jq --arg v "$VERSION" '.plugins[0].version = $v' .agents/plugins/marketplace.json > tmp.json
+          mv tmp.json .agents/plugins/marketplace.json
 
           echo "Updated manifests to v${VERSION}"
 

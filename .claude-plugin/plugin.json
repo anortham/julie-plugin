@@ -1,6 +1,6 @@
 {
   "name": "julie",
-  "description": "Code intelligence server: search, navigation, and refactoring across 34 languages",
+  "description": "Code intelligence server: search, navigation, and refactoring across 36 languages",
   "version": "7.18.0",
   "author": {
     "name": "Alan Northam"
@@ -23,5 +23,6 @@
         "${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs"
       ]
     }
-  }
+  },
+  "hooks": "./hooks/hooks.json"
 }

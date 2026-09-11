@@ -4,7 +4,7 @@
     "name": "Alan Northam"
   },
   "metadata": {
-    "description": "Code intelligence server: LSP-quality search, navigation, and refactoring across 34 languages"
+    "description": "Code intelligence server: LSP-quality search, navigation, and refactoring across 36 languages"
   },
   "plugins": [
     {

@@ -1,0 +1,15 @@
+{
+  "name": "julie-plugin",
+  "owner": {
+    "name": "Alan Northam"
+  },
+  "plugins": [
+    {
+      "name": "julie",
+      "source": "./",
+      "version": "7.18.0",
+      "description": "Code intelligence server: search, navigation, and refactoring across 36 languages",
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -4,31 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-This is the **plugin distribution repo** for [Julie](https://github.com/anortham/julie), a Rust-based code intelligence MCP server. This repo does not contain Julie's source code. It packages pre-built binaries and skills for installation as a Claude Code plugin.
+This is the **plugin distribution repo** for [Julie](https://github.com/anortham/julie), a Rust-based code intelligence MCP server. This repo does not contain Julie's source code. It packages pre-built binaries, skills, and one manifest per harness: Claude Code, Codex, Antigravity, OpenCode, Hermes, and Cursor.
 
 The actual Julie server source lives at `anortham/julie`. Changes to server behavior, MCP tools, or language support happen there, not here.
 
 ## Architecture
 
 ```
-.claude-plugin/        Plugin manifest and marketplace metadata
-  plugin.json          MCP server definition (command: node hooks/run.cjs)
-  marketplace.json     Registry entry for /plugin marketplace
-bin/
-  archives/            Compressed platform binaries (committed via LFS-like workflow)
+plugin.json                  Root manifest: Agent Plugins schema (Codex) and Antigravity read it
+mcp.json                     Agent Plugins MCP declaration (stdio, node ./hooks/run.cjs)
+mcp_config.json              Antigravity MCP declaration (same command)
+.claude-plugin/
+  plugin.json                Claude Code manifest (mcpServers, hooks)
+  marketplace.json           Claude Code marketplace entry
+.codex-plugin/
+  plugin.json                Codex compatibility manifest (skills, hooks, mcpServers)
+.agents/plugins/
+  marketplace.json           Codex marketplace entry
 hooks/
-  run.cjs              Node.js launcher: platform detection, extraction, and exec
-  hooks.json           Empty hook registration; behavior hooks are intentionally not shipped
-skills/                4 SKILL.md files copied from anortham/julie during updates
-package.json           Plugin identity and version
+  run.cjs                    Node.js launcher: platform detection, extraction, and exec
+  hooks.json                 SessionStart and SubagentStart hooks (Claude Code and Codex)
+  session-start.cjs          Prints JULIE_AGENT_INSTRUCTIONS.md as additional context
+bin/
+  archives/                  Compressed platform binaries with the semantic sidecar (committed)
+  install-opencode.cjs       Links skills into OpenCode and prints the opencode.json block
+skills/                      Skill directories copied from anortham/julie at the release tag
+JULIE_AGENT_INSTRUCTIONS.md  Routing text copied from anortham/julie at the release tag
+package.json                 Plugin identity and version
 ```
+
+Every MCP declaration runs the same command: `node <plugin-root>/hooks/run.cjs`. The path form differs per harness: `${CLAUDE_PLUGIN_ROOT}/hooks/run.cjs` for Claude Code, `./hooks/run.cjs` for Agent Plugins and Antigravity, and the absolute path of the clone for OpenCode, Hermes, and Cursor.
 
 ### Key Design Decisions
 
 - **No build step.** Binaries ship as compressed archives in `bin/archives/`. `run.cjs` extracts on first use and re-extracts when the archive is newer (plugin updated).
 - **Cross-platform via Node.js.** `run.cjs` handles platform detection, archive extraction, and binary exec entirely in Node (which Claude Code guarantees). On Windows, it uses the system bsdtar (`%SystemRoot%\System32\tar.exe`) for zip extraction to avoid MSYS2/Git Bash's GNU tar which can't handle zip. Launcher scripts must use LF line endings (enforced via `.gitattributes`).
-- **No behavior hooks.** The plugin intentionally avoids SessionStart/PreToolUse/PostToolUse coaching hooks. Julie's MCP server and skills are the stable integration surface; hook-driven nudges caused too much per-client config drift.
-- **Skills are copied, not authored here.** The `update-binaries.yml` workflow clones the julie source repo at a given tag and copies `skills/` wholesale. Edit skills in `anortham/julie`, not here.
+- **One session hook, one shared text.** Claude Code shares about a 4 KB instruction budget across all configured MCP servers and truncates the tail (anthropics/claude-code issue 43474). A user with two or three other servers can lose Julie's instructions. The SessionStart and SubagentStart hook in `hooks/hooks.json` prints the same `JULIE_AGENT_INSTRUCTIONS.md` the MCP instructions embed, nothing else. `JULIE_SESSION_HOOKS=0` disables it. Do not add coaching or tool-use hooks; the hook exists only to deliver the routing text.
+- **Skills and instructions are copied, not authored here.** The `update-binaries.yml` workflow clones the julie source repo at a given tag and copies `skills/` and `JULIE_AGENT_INSTRUCTIONS.md`. Edit them in `anortham/julie`, not here.
 - **Extracted binaries are gitignored.** Only the archives in `bin/archives/` are tracked. Platform-specific extraction dirs (`bin/aarch64-apple-darwin/`, etc.) are in `.gitignore`.
 
 ## Updating to a New Julie Version
@@ -39,16 +51,19 @@ Run the `Update Plugin` workflow (`.github/workflows/update-binaries.yml`) with 
 gh workflow run update-binaries.yml -f version=6.5.0 -f tag=v6.5.0
 ```
 
-This downloads archives from `anortham/julie` releases, replaces `bin/archives/`, copies skills, bumps version in all three manifests (`plugin.json`, `marketplace.json`, `package.json`), commits, tags, and pushes.
+This downloads archives from `anortham/julie` releases, replaces `bin/archives/`, copies skills and `JULIE_AGENT_INSTRUCTIONS.md`, bumps the version in every manifest, commits, and pushes.
 
 ## Version Syncing
 
-The version appears in three files that must stay in sync:
+The version appears in six files that must stay in sync:
 - `package.json` (top-level `version`)
+- `plugin.json` (top-level `version`)
 - `.claude-plugin/plugin.json` (top-level `version`)
+- `.codex-plugin/plugin.json` (top-level `version`)
 - `.claude-plugin/marketplace.json` (`plugins[0].version`)
+- `.agents/plugins/marketplace.json` (`plugins[0].version`)
 
-The update workflow handles this automatically. If you bump manually, update all three.
+The update workflow handles this automatically. If you bump manually, update all six.
 
 ## Resolving Local vs Workflow Divergence
 
@@ -88,9 +103,8 @@ Scripts in `hooks/` must:
 ## Testing Locally
 
 ```bash
-# Load plugin from local directory (no install needed)
-claude --plugin-dir /path/to/julie-plugin
+node --test hooks/
 
-# Or install locally
+claude --plugin-dir /path/to/julie-plugin
 claude plugin install /path/to/julie-plugin
 ```

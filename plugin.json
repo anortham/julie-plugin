@@ -1,0 +1,20 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "julie",
+  "version": "7.18.0",
+  "description": "Code intelligence server: search, navigation, and refactoring across 36 languages",
+  "author": {
+    "name": "Alan Northam"
+  },
+  "homepage": "https://github.com/anortham/julie",
+  "repository": "https://github.com/anortham/julie-plugin",
+  "license": "MIT",
+  "keywords": [
+    "code-intelligence",
+    "search",
+    "navigation",
+    "refactoring",
+    "tree-sitter",
+    "mcp"
+  ]
+}
