@@ -6,7 +6,7 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const hookSource = path.join(__dirname, 'session-start.cjs');
-const instructions = '# Julie\n\nUse fast_search first.\n';
+const instructions = fs.readFileSync(path.join(__dirname, '..', 'JULIE_AGENT_INSTRUCTIONS.md'), 'utf8');
 
 function stagePlugin({ withInstructions }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-hook-'));
@@ -31,12 +31,21 @@ function runHook(root, event, env = {}) {
 
 test('session-start prints the instructions file as SessionStart context', () => {
   const root = stagePlugin({ withInstructions: true });
-  assert.deepEqual(JSON.parse(runHook(root, 'session-start')), {
+  const output = JSON.parse(runHook(root, 'session-start'));
+  assert.deepEqual(output, {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
       additionalContext: instructions.trim(),
     },
   });
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /manage_workspace\(operation="open", path="\/absolute\/project"\)/,
+  );
+  assert.match(
+    output.hookSpecificOutput.additionalContext,
+    /`health`, `refresh`, and `remove` require `workspace_id`/,
+  );
 });
 
 test('subagent-start prints the instructions file as SubagentStart context', () => {
