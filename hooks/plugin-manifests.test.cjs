@@ -20,3 +20,20 @@ test('portable plugin manifests register the Julie stdio launcher', () => {
     args: ['./hooks/run.cjs'],
   });
 });
+
+test('release workflow is reusable and pins the reviewed plugin source', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/update-binaries.yml'), 'utf8');
+  assert.match(workflow, /workflow_call:/);
+  assert.match(workflow, /plugin_source_sha:/);
+  assert.match(workflow, /ref: \$\{\{ inputs\.plugin_source_sha \}\}/);
+  assert.match(workflow, /publication_token:/);
+  assert.match(workflow, /published_sha/);
+  assert.match(workflow, /node --test/);
+  assert.match(workflow, /uses: actions\/setup-node@v4/);
+  assert.match(workflow, /node-version: 22\.5\.0/);
+  assert.match(workflow, /node --test hooks\/\*\.test\.cjs/);
+  assert.match(workflow, /julie-v\$\{VERSION\}-aarch64-apple-darwin\.tar\.gz/);
+  assert.match(workflow, /julie-v\$\{VERSION\}-x86_64-pc-windows-msvc\.zip/);
+  assert.match(workflow, /find \. -type l/);
+  assert.match(workflow, /bin\/aarch64-apple-darwin/);
+});
