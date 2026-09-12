@@ -109,6 +109,88 @@ function resolveLaunchBinary({
   return null;
 }
 
+function isMaintainerOverride(serverPath, sidecarPath, fsImpl = fs) {
+  return [serverPath, sidecarPath].every((candidate) => {
+    try {
+      return fsImpl.lstatSync(candidate).isSymbolicLink() && fsImpl.statSync(candidate).isFile();
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
+function safeRelativePath(candidate) {
+  return typeof candidate === 'string'
+    && candidate.length > 0
+    && !path.posix.isAbsolute(candidate)
+    && !path.win32.isAbsolute(candidate)
+    && !candidate.split(/[\\/]/).includes('..');
+}
+
+function manifestFiles(manifest) {
+  return Array.isArray(manifest.files)
+    ? manifest.files.map((file) => typeof file === 'string' ? file : file.path)
+    : [];
+}
+
+function validateVersion(versionDir, target, archiveName, serverName, sidecarName, fsImpl = fs) {
+  const marker = path.join(versionDir, '.ready');
+  const manifestPath = path.join(versionDir, 'package-manifest.json');
+  try {
+    if (!fsImpl.lstatSync(marker).isFile()) throw new Error('readiness marker is not a regular file');
+    if (fsImpl.readFileSync(marker, 'utf8').trim() !== archiveName) throw new Error('readiness marker does not match the selected archive');
+    let manifestStat;
+    try {
+      manifestStat = fsImpl.lstatSync(manifestPath);
+    } catch (_) {
+      throw new Error('package manifest is missing');
+    }
+    if (!manifestStat.isFile()) throw new Error('package manifest is not a regular file');
+    let manifest;
+    try {
+      manifest = JSON.parse(fsImpl.readFileSync(manifestPath, 'utf8'));
+    } catch (error) {
+      throw new Error(`package manifest is malformed: ${error.message}`);
+    }
+    if (manifest.schema_version !== 2) throw new Error(`package manifest schema_version must be 2, got ${manifest.schema_version}`);
+    if (manifest.rust_target !== target) throw new Error(`package manifest rust_target ${manifest.rust_target} does not match ${target}`);
+    const files = manifestFiles(manifest);
+    if (files.length === 0) throw new Error('package manifest files must be nonempty');
+    if (!files.includes(sidecarName)) throw new Error(`package manifest does not list ${sidecarName}`);
+    for (const entry of [serverName, ...files]) {
+      if (!safeRelativePath(entry)) throw new Error(`package manifest has unsafe path: ${entry}`);
+      if (!fsImpl.lstatSync(path.join(versionDir, entry)).isFile()) throw new Error(`package file is missing or not regular: ${entry}`);
+    }
+    return true;
+  } catch (error) {
+    throw new Error(`Julie: invalid extracted version: ${error.message}; remove the incomplete version directory and restart the harness`);
+  }
+}
+
+function validateArchive(archive, plat, execFileSyncImpl = execFileSync) {
+  const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+  const tarBin = plat === 'win32' ? path.join(sysRoot, 'System32', 'tar.exe') : 'tar';
+  let entries;
+  try {
+    entries = execFileSyncImpl(tarBin, ['-tf', archive], { stdio: 'pipe', windowsHide: true }).toString().split(/\r?\n/).filter(Boolean);
+  } catch (error) {
+    const detail = error.stderr ? error.stderr.toString().trim() : error.message;
+    throw new Error(`Julie: cannot inspect ${path.basename(archive)}: ${detail}; replace the archive and restart the harness`);
+  }
+  if (!entries.every(safeRelativePath)) throw new Error(`Julie: archive contains an unsafe path; replace ${path.basename(archive)} and restart the harness`);
+}
+
+function containsSymlink(root, fsImpl = fs) {
+  return fsImpl.readdirSync(root, { withFileTypes: true }).some((entry) => {
+    const candidate = path.join(root, entry.name);
+    return entry.isSymbolicLink() || (entry.isDirectory() && containsSymlink(candidate, fsImpl));
+  });
+}
+
+function versionDirectory(pluginRootPath, target, archive) {
+  return path.join(pluginRootPath, 'bin', target, 'versions', path.basename(archive));
+}
+
 function maybeStopLegacyDaemon({
   needsExtract,
   legacyDaemonBinaryPath,
@@ -197,16 +279,8 @@ function extractBinary({
     stderr.write('Julie: ready.\n');
     return true;
   } catch (error) {
-    // On Windows the daemon may hold an exclusive lock on the binary.
-    // If extraction fails but the binary already exists, just use it.
-    if (fsImpl.existsSync(binaryPath)) {
-      stderr.write('Julie: extraction skipped (binary in use), using existing binary.\n');
-      return false;
-    } else {
-      const detail = error.stderr ? error.stderr.toString() : error.message;
-      stderr.write(`Julie: extraction failed: ${detail}\nSee https://github.com/anortham/julie/issues for help.\n`);
-      process.exit(1);
-    }
+    const detail = error.stderr ? error.stderr.toString() : error.message;
+    throw new Error(`Julie: extraction failed: ${detail}; remove the incomplete version directory and restart the harness`);
   }
 }
 
@@ -215,6 +289,7 @@ function prepareBinaryForLaunch({
   target,
   archivePattern,
   binaryPath,
+  sidecarPath,
   legacyDaemonBinaryPath,
   archiveDir,
   plat,
@@ -222,8 +297,41 @@ function prepareBinaryForLaunch({
   stderr = process.stderr,
   extractBinaryImpl = extractBinary,
   maybeStopLegacyDaemonImpl = maybeStopLegacyDaemon,
+  validateArchiveImpl = validateArchive,
 }) {
   const archive = findArchive(archiveDir, archivePattern, fsImpl);
+  if (sidecarPath && isMaintainerOverride(binaryPath, sidecarPath, fsImpl)) {
+    return binaryPath;
+  }
+  if (sidecarPath && !archive) {
+    throw new Error(`archive not found matching: ${archivePattern.prefix}*${archivePattern.suffix}`);
+  }
+  if (sidecarPath) {
+    const finalDir = versionDirectory(pluginRootPath, target, archive);
+    const serverPath = path.join(finalDir, path.basename(binaryPath));
+    if (fsImpl.existsSync(finalDir)) {
+      validateVersion(finalDir, target, path.basename(archive), path.basename(binaryPath), path.basename(sidecarPath), fsImpl);
+      return serverPath;
+    }
+    const stagingDir = `${finalDir}.staging-${process.pid}`;
+    fsImpl.mkdirSync(path.dirname(stagingDir), { recursive: true });
+    const uniqueStagingDir = fsImpl.mkdtempSync(`${stagingDir}-`);
+    try {
+      validateArchiveImpl(archive, plat);
+      extractBinaryImpl({ archive, binaryPath: path.join(uniqueStagingDir, path.basename(binaryPath)), destDir: uniqueStagingDir, plat, touchPaths: [], stderr, fsImpl });
+      if (containsSymlink(uniqueStagingDir, fsImpl)) {
+        throw new Error(`Julie: extracted version contains a symlink; remove it and restart the harness`);
+      }
+      fsImpl.writeFileSync(path.join(uniqueStagingDir, '.ready'), `${path.basename(archive)}\n`);
+      validateVersion(uniqueStagingDir, target, path.basename(archive), path.basename(binaryPath), path.basename(sidecarPath), fsImpl);
+      fsImpl.renameSync(uniqueStagingDir, finalDir);
+      return serverPath;
+    } catch (error) {
+      fsImpl.rmSync(uniqueStagingDir, { recursive: true, force: true });
+      if (error.message.includes('restart the harness')) throw error;
+      throw new Error(`${error.message}; replace ${path.basename(archive)} and restart the harness`);
+    }
+  }
   const markerPath = getPreflightMarkerPath(pluginRootPath, target);
   const markerKey = archive ? path.basename(archive) : 'no-archive';
   const extractionMarkerPath = getExtractionMarkerPath(pluginRootPath, target);
@@ -334,6 +442,7 @@ function main() {
 
   const { target, binaryName, legacyDaemonBinaryName, archivePattern } = runtime;
   const binaryPath = path.join(pluginRoot, 'bin', target, binaryName);
+  const sidecarPath = path.join(pluginRoot, 'bin', target, process.platform === 'win32' ? 'julie-semantic-sidecar.exe' : 'julie-semantic-sidecar');
   const legacyDaemonBinaryPath = legacyDaemonBinaryName
     ? path.join(pluginRoot, 'bin', target, legacyDaemonBinaryName)
     : null;
@@ -343,6 +452,7 @@ function main() {
     target,
     archivePattern,
     binaryPath,
+    sidecarPath,
     legacyDaemonBinaryPath,
     archiveDir,
     plat: os.platform(),
@@ -357,6 +467,7 @@ module.exports = {
   getPreflightMarkerPath,
   maybeStopLegacyDaemon,
   prepareBinaryForLaunch,
+  validateArchive,
 };
 
 if (require.main === module) {

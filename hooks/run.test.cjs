@@ -10,11 +10,16 @@ const {
   getPreflightMarkerPath,
   maybeStopLegacyDaemon,
   prepareBinaryForLaunch,
+  validateArchive,
 } = require('./run.cjs');
 
 function writeServerBinary(binaryPath) {
   fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
   fs.writeFileSync(binaryPath, 'server');
+}
+
+function writeManifest(dir, target, files = ['julie-semantic-sidecar']) {
+  fs.writeFileSync(path.join(dir, 'package-manifest.json'), JSON.stringify({ schema_version: 2, rust_target: target, files }));
 }
 
 test('detectPlatform returns aarch64-apple-darwin config for darwin arm64', () => {
@@ -429,4 +434,111 @@ test('prepareBinaryForLaunch fails after extraction if current server binary is 
       fs.writeFileSync(path.join(path.dirname(binaryPath), 'julie-adapter.exe'), 'adapter-only');
     },
   }), /missing required Julie binary/);
+});
+
+test('new archive extracts without overwriting running version', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const archiveDir = path.join(tmp, 'bin', 'archives');
+  const oldDir = path.join(tmp, 'bin', target, 'versions', 'julie-v1-x86_64-unknown-linux-gnu.tar.gz');
+  const archive = path.join(archiveDir, 'julie-v2-x86_64-unknown-linux-gnu.tar.gz');
+  fs.mkdirSync(oldDir, { recursive: true });
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(oldDir, 'julie-server'), 'old');
+  fs.writeFileSync(archive, 'archive');
+  let extractionCalls = 0;
+  let archiveValidationCalls = 0;
+  const options = {
+    pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' },
+    binaryPath: path.join(tmp, 'bin', target, 'julie-server'), sidecarPath: path.join(tmp, 'bin', target, 'julie-semantic-sidecar'), archiveDir, plat: 'linux', stderr: { write() {} },
+    validateArchiveImpl() { archiveValidationCalls += 1; },
+    extractBinaryImpl({ destDir }) { extractionCalls += 1; writeServerBinary(path.join(destDir, 'julie-server')); fs.writeFileSync(path.join(destDir, 'julie-semantic-sidecar'), 'sidecar'); writeManifest(destDir, target); },
+  };
+  const launched = prepareBinaryForLaunch(options);
+  const reused = prepareBinaryForLaunch(options);
+  assert.equal(fs.readFileSync(path.join(oldDir, 'julie-server'), 'utf8'), 'old');
+  assert.match(launched, /julie-v2-x86_64-unknown-linux-gnu\.tar\.gz/);
+  assert.equal(reused, launched);
+  assert.equal(extractionCalls, 1);
+  assert.equal(archiveValidationCalls, 1);
+});
+
+test('failed extraction never launches another archive version', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const archiveDir = path.join(tmp, 'bin', 'archives');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(archiveDir, 'julie-v2-x86_64-unknown-linux-gnu.tar.gz'), 'archive');
+  const previous = path.join(tmp, 'bin', target, 'versions', 'julie-v1-x86_64-unknown-linux-gnu.tar.gz');
+  fs.mkdirSync(previous, { recursive: true });
+  writeServerBinary(path.join(previous, 'julie-server'));
+  fs.writeFileSync(path.join(previous, 'julie-semantic-sidecar'), 'sidecar');
+  writeManifest(previous, target);
+  fs.writeFileSync(path.join(previous, '.ready'), 'julie-v1-x86_64-unknown-linux-gnu.tar.gz\n');
+  assert.throws(() => prepareBinaryForLaunch({ pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' }, binaryPath: path.join(tmp, 'bin', target, 'julie-server'), sidecarPath: path.join(tmp, 'bin', target, 'julie-semantic-sidecar'), archiveDir, plat: 'linux', stderr: { write() {} }, validateArchiveImpl() {}, extractBinaryImpl() { throw new Error('bad archive; remove the incomplete version directory and restart the harness'); } }), /bad archive; remove the incomplete version directory and restart the harness/);
+  assert.equal(fs.existsSync(previous), true);
+});
+
+test('partial extraction is never marked ready', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const archiveDir = path.join(tmp, 'bin', 'archives');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(archiveDir, 'julie-v2-x86_64-unknown-linux-gnu.tar.gz'), 'archive');
+  const finalDir = path.join(tmp, 'bin', target, 'versions', 'julie-v2-x86_64-unknown-linux-gnu.tar.gz');
+  assert.throws(() => prepareBinaryForLaunch({ pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' }, binaryPath: path.join(tmp, 'bin', target, 'julie-server'), sidecarPath: path.join(tmp, 'bin', target, 'julie-semantic-sidecar'), archiveDir, plat: 'linux', stderr: { write() {} }, validateArchiveImpl() {}, extractBinaryImpl({ destDir }) { writeServerBinary(path.join(destDir, 'julie-server')); fs.writeFileSync(path.join(destDir, 'julie-semantic-sidecar'), 'sidecar'); } }), /package manifest is missing; remove the incomplete version directory and restart the harness/);
+  assert.equal(fs.existsSync(finalDir), false);
+  assert.equal(fs.readdirSync(path.dirname(finalDir)).some((name) => name.includes('.staging-')), false);
+});
+
+test('required sidecar is validated before launch', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const archiveDir = path.join(tmp, 'bin', 'archives');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(archiveDir, 'julie-v2-x86_64-unknown-linux-gnu.tar.gz'), 'archive');
+  assert.throws(() => prepareBinaryForLaunch({ pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' }, binaryPath: path.join(tmp, 'bin', target, 'julie-server'), sidecarPath: path.join(tmp, 'bin', target, 'julie-semantic-sidecar'), archiveDir, plat: 'linux', stderr: { write() {} }, validateArchiveImpl() {}, extractBinaryImpl({ destDir }) { writeServerBinary(path.join(destDir, 'julie-server')); writeManifest(destDir, target); } }), /julie-semantic-sidecar/);
+});
+
+test('archive traversal is rejected before extraction', () => {
+  assert.throws(
+    () => validateArchive('bad.tar.gz', 'linux', () => Buffer.from('../escape\njulie-server\n')),
+    /unsafe path/
+  );
+});
+
+test('symlink package entries are rejected before ready', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const archiveDir = path.join(tmp, 'bin', 'archives');
+  fs.mkdirSync(archiveDir, { recursive: true });
+  fs.writeFileSync(path.join(archiveDir, 'julie-v2-x86_64-unknown-linux-gnu.tar.gz'), 'archive');
+  assert.throws(() => prepareBinaryForLaunch({
+    pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' },
+    binaryPath: path.join(tmp, 'bin', target, 'julie-server'), sidecarPath: path.join(tmp, 'bin', target, 'julie-semantic-sidecar'),
+    archiveDir, plat: 'linux', stderr: { write() {} }, validateArchiveImpl() {},
+    extractBinaryImpl({ destDir }) {
+      writeServerBinary(path.join(destDir, 'julie-server'));
+      fs.writeFileSync(path.join(destDir, 'actual-sidecar'), 'sidecar');
+      fs.symlinkSync('actual-sidecar', path.join(destDir, 'julie-semantic-sidecar'));
+      writeManifest(destDir, target);
+    },
+  }), /symlink/);
+});
+
+test('maintainer override rejects directory symlink targets', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'julie-plugin-run-'));
+  const target = 'x86_64-unknown-linux-gnu';
+  const binDir = path.join(tmp, 'bin', target);
+  const server = path.join(binDir, 'julie-server');
+  const sidecar = path.join(binDir, 'julie-semantic-sidecar');
+  const directory = path.join(tmp, 'not-a-binary');
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(directory);
+  fs.symlinkSync(directory, server);
+  fs.symlinkSync(directory, sidecar);
+  assert.throws(() => prepareBinaryForLaunch({
+    pluginRootPath: tmp, target, archivePattern: { prefix: 'julie-v', suffix: '-x86_64-unknown-linux-gnu.tar.gz' },
+    binaryPath: server, sidecarPath: sidecar, archiveDir: path.join(tmp, 'bin', 'archives'), plat: 'linux', stderr: { write() {} },
+  }), /archive not found/);
 });
