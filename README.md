@@ -15,13 +15,13 @@ The `/web-research` skill needs [browser39](https://github.com/alejandroqh/brows
 | Harness | Install | Mechanism |
 |---|---|---|
 | Claude Code | `/plugin marketplace add anortham/julie-plugin`, then `/plugin install julie@julie-plugin` | plugin manifest with `mcpServers` and hooks |
-| Codex | `codex plugin marketplace add anortham/julie-plugin`, then `codex plugin add julie@julie-plugin`, then add the `mcp_servers.julie` block to `~/.codex/config.toml` | skills and hooks from the plugin; stdio command from the config |
-| Antigravity | `agy plugin install https://github.com/anortham/julie-plugin`, then add the `mcpServers.julie` block to `~/.gemini/config/mcp_config.json` | skills from the plugin; stdio command from the config |
+| Codex | `codex plugin marketplace add anortham/julie-plugin`, then `codex plugin add julie@julie-plugin` | Agent Plugins `mcp.json`, skills, and hooks |
+| Antigravity | `agy plugin install https://github.com/anortham/julie-plugin` | plugin `mcp_config.json` and skills |
 | OpenCode | clone, `node bin/install-opencode.cjs`, paste the printed `opencode.json` block | `mcp.julie` local command |
 | Hermes | clone, add the `mcp_servers.julie` block to `~/.hermes/config.yaml` | stdio command |
 | Cursor | clone, add the `mcpServers.julie` block to `~/.cursor/mcp.json` | stdio command |
 
-Every harness runs the same command: `node <plugin-root>/hooks/run.cjs`. The launcher extracts the archive for your platform and starts `julie-server` in the project directory.
+Every harness runs the same command: `node <plugin-root>/hooks/run.cjs`. The launcher extracts the archive for your platform and starts `julie-server`. Its launch directory does not select a workspace.
 
 ### Claude Code
 
@@ -43,17 +43,7 @@ codex plugin marketplace add anortham/julie-plugin
 codex plugin add julie@julie-plugin
 ```
 
-Codex reads the root `plugin.json`, `skills/`, and `hooks/hooks.json`. Run `codex`, open `/hooks`, and trust the two Julie hooks.
-
-Then register the server in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.julie]
-command = "node"
-args = ["/absolute/path/to/julie-plugin/hooks/run.cjs"]
-```
-
-Use a clone of this repo, or the plugin root that `codex plugin list` prints. Codex starts a plugin's MCP servers inside the plugin directory. It sends no MCP roots. So this repo declares no server for Codex; the config entry starts Julie in the project directory. Set `env = { "JULIE_WORKSPACE" = "/absolute/path/to/your/project" }` on the entry when Codex starts Julie somewhere else.
+Codex reads the root `plugin.json`, `mcp.json`, `skills/`, and `hooks/hooks.json`. Run `codex`, open `/hooks`, and trust the two Julie hooks. The plugin registers Julie's stdio server; no separate `config.toml` entry is needed.
 
 ### Antigravity
 
@@ -61,20 +51,7 @@ Use a clone of this repo, or the plugin root that `codex plugin list` prints. Co
 agy plugin install https://github.com/anortham/julie-plugin
 ```
 
-Antigravity reads the root `plugin.json` and `skills/`. Then register the server in `~/.gemini/config/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "julie": {
-      "command": "node",
-      "args": ["/absolute/path/to/julie-plugin/hooks/run.cjs"]
-    }
-  }
-}
-```
-
-Antigravity starts a plugin's MCP servers inside the plugin directory. It sends no MCP roots. So this repo declares no server for Antigravity; the config entry starts Julie in the project directory.
+Antigravity reads the root `plugin.json`, `mcp_config.json`, and `skills/`. The plugin registers Julie's stdio server; no separate global MCP entry is needed.
 
 ### OpenCode
 
@@ -100,8 +77,6 @@ The installer links the skills into `~/.config/opencode/skills/` and prints an `
 ```
 
 OpenCode expects `command` as an array. The env key is `environment`, not `env`.
-
-OpenCode expects `command` as an array and the env key is `environment`. `JULIE_WORKSPACE` is optional when OpenCode starts from the repo root.
 
 Run `node bin/install-opencode.cjs --uninstall` to remove the skill links.
 
@@ -131,9 +106,9 @@ Clone the repo, then add this block to `~/.cursor/mcp.json` (global) or `.cursor
 }
 ```
 
-### JULIE_WORKSPACE
+### Workspace targeting
 
-The launcher binds every tool call to `JULIE_WORKSPACE` when you set it, else to the directory the harness started it in. Every path above starts Julie in the project directory. Set `JULIE_WORKSPACE` in the MCP config entry when a harness starts Julie somewhere else.
+The launcher only forwards MCP traffic. Its working directory and `JULIE_WORKSPACE` do not select a checkout. Call `manage_workspace(operation="open", path="/absolute/project")`, then pass the returned ID as `workspace` on every search, navigation, and editing call. Other `manage_workspace` operations use `workspace_id`; global `list` and `status` need neither selector.
 
 ## What the Plugin Provides
 
@@ -155,6 +130,8 @@ This repo packages pre-built binaries and plugin metadata. Julie's source code l
 
 ```
 plugin.json                  Root manifest: Agent Plugins schema (Codex) and Antigravity read it
+mcp.json                     Agent Plugins MCP declaration
+mcp_config.json              Antigravity MCP declaration
 .claude-plugin/
   plugin.json                Claude Code manifest (mcpServers, hooks)
   marketplace.json           Claude Code marketplace entry

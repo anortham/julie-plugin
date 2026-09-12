@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "julie": {
+      "command": "node",
+      "args": [
+        "./hooks/run.cjs"
+      ]
+    }
+  }
+}
