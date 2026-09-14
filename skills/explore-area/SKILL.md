@@ -1,0 +1,148 @@
+---
+name: explore-area
+description: Orient on a new codebase area using get_context for token-budgeted exploration. Use when the user asks "what does this module do", "explain this part", or wants to understand an unfamiliar area before making changes.
+user-invocable: true
+arguments: "<query or concept>"
+allowed-tools: mcp__julie__get_context, mcp__julie__fast_search, mcp__julie__deep_dive, mcp__julie__get_symbols, mcp__julie__call_path, mcp__julie__manage_workspace
+---
+
+# Explore Area
+
+Orient on an unfamiliar area of the codebase using Julie's `get_context` tool. This is the recommended starting point before any modification task — understand the area first, then dive in.
+
+## Process
+
+### Step 1: Get Token-Budgeted Context
+
+```
+get_context(query="<area, concept, or module name>", workspace="<workspace_id>")
+```
+
+Conceptual queries work well here, not just symbol names. For example, `get_context(query="error handling and retries", workspace="<workspace_id>")` will find relevant symbols by meaning via semantic search.
+
+For a quick concept-to-symbol probe before expanding context, use `fast_search(query="...", backend="semantic", workspace="<workspace_id>")` or `backend="hybrid"`. Those backends return symbol-backed hits only; use explicit `backend="lexical"` for file names, path fragments, or pure lexical comparison. Omitting `backend` runs semantic for natural-language queries when vectors are ready, else lexical; lexical may show a labeled semantic fallback only when an identifier-like unscoped query returns zero hits and embeddings are ready.
+
+This returns:
+- **Pivots**: The most relevant symbols with full code bodies
+- **Neighbors**: Connected symbols with signatures only
+- **File map**: Which files contain which symbols
+
+The output is automatically token-budgeted — few results get deep context, many results get broad overview.
+
+### Step 1a: Bias with task inputs (optional)
+
+`get_context` accepts task-shaped inputs that bias pivot selection and neighbor ranking toward what the user is actually working on. Mix and match as relevant:
+
+- **`edited_files=[...]`** — boost pivots and neighbors in those files. Use when the user has changes in progress and wants context around them.
+- **`entry_symbols=[...]`** — explicit symbol entry points the user cares about. Pins those symbols as pivots even if search scoring wouldn't have surfaced them.
+- **`stack_trace="..."`** — paste a stack trace; `file:line` references inside get parsed and bias pivot selection toward the frames involved.
+- **`failing_test="<test file or test symbol>"`** — boost production symbols linked to that test via the test-linkage graph. Great for "why is this test failing?" orientation.
+- **`max_hops=2`** — allow bounded second-hop expansion when first-hop is thin (fewer than 4 code neighbors). Default is 1. Use for sparsely-connected areas where the immediate neighborhood isn't enough.
+- **`prefer_tests=true`** — let test-linked symbols compete for neighbor slots alongside production callers. Default is `false` (tests stay out of the neighbor budget). Flip on when the user is writing or debugging tests.
+
+Example — task-shaped usage combining several inputs:
+
+```
+get_context(query="error handling in request path",
+            edited_files=["src/handler.rs"],
+            failing_test="test_request_rejects_invalid_auth",
+            max_hops=2,
+            workspace="<workspace_id>")
+```
+
+### Step 2: Identify Key Symbols
+
+From the pivots, identify:
+- **Entry points**: Public functions/methods that external code calls (high centrality score)
+- **Core types**: Structs, enums, traits that define the area's data model
+- **Utilities**: Private helpers that support the entry points
+
+Centrality scores in the output indicate how well-connected each symbol is — high-centrality symbols are the important ones.
+
+### Step 3: Drill Into Key Symbols (Optional)
+
+For pivots that need more context (e.g., you need to see callers/callees):
+
+```
+deep_dive(symbol="<key_symbol>", depth="overview", workspace="<workspace_id>")
+```
+
+Use `context_file` if the symbol name is ambiguous:
+
+```
+deep_dive(symbol="<symbol>", depth="overview", context_file="<partial_path>", workspace="<workspace_id>")
+```
+
+### Step 3b: Trace a concrete path when the question is about reachability
+
+If the user asks a path-shaped question, use `call_path` instead of trying to reconstruct the route by hand:
+
+```
+call_path(from="<entry_or_caller>", to="<sink_or_dependency>", workspace="<workspace_id>")
+```
+
+Use `from_file_path` and `to_file_path` when shared names make either endpoint ambiguous.
+
+### Step 4: Check File Structure (Optional)
+
+For files with many symbols that weren't fully covered by `get_context`:
+
+```
+get_symbols(file_path="<file>", mode="structure", max_depth=1, workspace="<workspace_id>")
+```
+
+This shows the full outline without reading the file contents.
+
+### Step 5: Report
+
+```
+Area: <concept/module>
+
+Key Entry Points:
+  - function_a (src/module.rs:45) — centrality: high
+    Purpose: <what it does>
+  - function_b (src/module.rs:120) — centrality: medium
+    Purpose: <what it does>
+
+Core Types:
+  - StructA (src/types.rs:10) — <what it represents>
+  - TraitB (src/traits.rs:5) — <what it defines>
+
+File Map:
+  src/module.rs — main implementation (function_a, function_b, helpers)
+  src/types.rs — data types (StructA, EnumC)
+  src/traits.rs — trait definitions (TraitB)
+
+Dependency Flow:
+  External callers → function_a → helper_1 → database queries
+                   → function_b → TraitB implementations
+
+Suggested Starting Point:
+  <which file/function to read first for this task>
+```
+
+## Tips
+
+- **Use `format: "readable"` for human-friendly output** with section separators and richer formatting:
+  ```
+  get_context(query="...", format="readable", workspace="<workspace_id>")
+  ```
+  The default format is compact (optimized for AI agent consumption).
+- **Use `max_tokens` to control budget** if the default is too much or too little:
+  ```
+  get_context(query="...", max_tokens=1000, workspace="<workspace_id>")
+  ```
+- **Filter by language or file pattern** to narrow scope:
+  ```
+  get_context(query="...", language="rust", file_pattern="src/tools/**", workspace="<workspace_id>")
+  ```
+- **Use `call_path` for one concrete route**, not general impact:
+  ```
+  call_path(from="RequestHandler::handle", to="persist_session", workspace="<workspace_id>")
+  ```
+  Reach for `blast_radius` when the real question is "what would this change affect?"
+- **Cross-workspace**: Call `manage_workspace(operation="open", path="<path>")` first, then pass the returned ID as `workspace` to scoped calls; use `workspace_id` only for management operations that require it.
+
+## Long neighbor lists
+
+For broad queries, `get_context` ends with `Output truncated at <N> results; narrow the query or pass a smaller limit.` when the neighbor list did not fit. Narrow the query (`file_pattern`, `language`, `entry_symbols`) or raise `max_tokens` and run it again. `blast_radius` reports overflow the same way.

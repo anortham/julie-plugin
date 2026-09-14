@@ -1,0 +1,13 @@
+{
+  "name": "julie",
+  "version": "8.0.0",
+  "description": "Code intelligence server: search, navigation, and refactoring across 36 languages",
+  "author": {
+    "name": "Alan Northam"
+  },
+  "homepage": "https://github.com/anortham/julie",
+  "repository": "https://github.com/anortham/julie-plugin",
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json"
+}
