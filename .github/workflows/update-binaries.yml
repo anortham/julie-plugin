@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.plugin_source_sha }}
-          token: ${{ secrets.publication_token }}
+          token: ${{ secrets.publication_token || github.token }}
 
       - name: Download release archives
         env:
@@ -175,7 +175,7 @@ jobs:
           for (const [path, getVersion] of manifests) {
             if (getVersion(JSON.parse(fs.readFileSync(path))) !== version) throw new Error(`version mismatch: ${path}`);
           }
-          for (const path of ['mcp.json', 'mcp_codex.json', 'mcp_config.json', 'hooks/hooks.json', 'JULIE_AGENT_INSTRUCTIONS.md']) {
+          for (const path of ['mcp.json', 'mcp_config.json', 'hooks/hooks.json', 'JULIE_AGENT_INSTRUCTIONS.md']) {
             if (!fs.statSync(path).size) throw new Error(`missing required plugin file: ${path}`);
           }
           NODE
@@ -196,7 +196,7 @@ jobs:
       - name: Commit and force-push (orphan to prevent history bloat)
         id: publish
         env:
-          GH_TOKEN: ${{ secrets.publication_token }}
+          GH_TOKEN: ${{ secrets.publication_token || github.token }}
         run: |
           VERSION="${{ inputs.version }}"
 

@@ -26,6 +26,8 @@ test('release workflow is reusable and pins the reviewed plugin source', () => {
   assert.match(workflow, /workflow_call:/);
   assert.match(workflow, /plugin_source_sha:/);
   assert.match(workflow, /ref: \$\{\{ inputs\.plugin_source_sha \}\}/);
+  assert.match(workflow, /token: \$\{\{ secrets\.publication_token \|\| github\.token \}\}/);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ secrets\.publication_token \|\| github\.token \}\}/);
   assert.match(workflow, /publication_token:/);
   assert.match(workflow, /published_sha/);
   assert.match(workflow, /node --test/);
@@ -34,6 +36,7 @@ test('release workflow is reusable and pins the reviewed plugin source', () => {
   assert.match(workflow, /node --test hooks\/\*\.test\.cjs/);
   assert.match(workflow, /julie-v\$\{VERSION\}-aarch64-apple-darwin\.tar\.gz/);
   assert.match(workflow, /julie-v\$\{VERSION\}-x86_64-pc-windows-msvc\.zip/);
+  assert.doesNotMatch(workflow, /mcp_codex\.json/);
   assert.match(workflow, /find \. -type l/);
   assert.match(workflow, /bin\/aarch64-apple-darwin/);
 });
